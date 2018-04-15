@@ -29,13 +29,14 @@ int send_message(char *message, struct sockaddr_in server_socket){
   int client_socket = socket(PF_INET, SOCK_DGRAM, 0); //DEFINIÇÃO DE TRANSPORTE UDP; abertura do SOCKET no int; PF_INET: Limitador do UDP; SOCK_DGRAM: datagrama->UDP
   socklen_t addr_size;
   addr_size = sizeof server_socket;//tamanho do endereço q esta sendo enviado
-  sendto(client_socket,message,SIZE,0,(struct sockaddr *)&server_socket,addr_size); //envio da mensagem; pra quem esta sendo enviando (server_socket) e o tamanho da mensagem
+  sendto(client_socket, message, SIZE, 0, (struct sockaddr *)&server_socket, addr_size); //envio da mensagem; pra quem esta sendo enviando (server_socket) e o tamanho da mensagem
 
   return client_socket;
 }
 
-int receive_answer (int client_socket, struct sockaddr_in server_socket){ //recebe uma char
+char* receive_answer (int client_socket, struct sockaddr_in server_socket){ //recebe uma char
   // waiting answer, when receiving it, returning 0
+    char *received_answer = NULL;
     struct timeval tv;
     tv.tv_sec = 1;
     tv.tv_usec = 0;
@@ -43,19 +44,17 @@ int receive_answer (int client_socket, struct sockaddr_in server_socket){ //rece
 
     char *received_message = (char*)malloc(SIZE * sizeof(char));; //variavel para guardar o q sera recebido do servidor; malloc: separa o espaço do vetor
     socklen_t addr_size = sizeof server_socket;//tamanho do endereço q esta sendo enviado
-    int udp_return = recvfrom(client_socket,received_message, SIZE, 0, (struct sockaddr *)&server_socket, &addr_size); //tamanho da variavel recebido
+    int udp_return = recv(client_socket,received_message, SIZE, 0); //tamanho da variavel recebido
     if (udp_return > 0){ //condição para sair do while
       //printf("recebeu");
-      char *subbuff = (char*)malloc(SIZE - 1 * sizeof(char)); //variavel auxiliar
-      memcpy( subbuff, &received_message[0], SIZE -1 ); //copia o q esta na mensagem recebida para essa nova variavel
-      subbuff[udp_return] = '\0'; //acrescenta o /0 no final para garantir o printf
+      char *buffer= (char*)malloc(SIZE - 1 * sizeof(char)); //variavel auxiliar
+      memcpy( buffer, &received_message[0], SIZE -1 ); //copia o q esta na mensagem recebida para essa nova variavel
+      buffer[udp_return] = '\0'; //acrescenta o /0 no final para garantir o printf
 
    //   printf("Resposta do servidor %d: %s\n",udp_return,subbuff);
-      printf("Resposta do servidor: %s\n\n",subbuff);
-
-      return 0;
+      received_answer = buffer;
     }
-
+    return received_answer;
 }
 
 int rsv(char* message){
@@ -63,8 +62,21 @@ int rsv(char* message){
   struct sockaddr_in server_socket = create_socket_addr();
 
   int client_socket = send_message(message, server_socket);
+  char* answer =  receive_answer(client_socket, server_socket);
+  if (answer != NULL){
+    printf("%s\n", answer);
 
-  receive_answer(client_socket, server_socket);
+  } else {
+      printf("Time out!\n");
+  }
+}
+
+long int calc_rtt(struct timeval initial_time, struct timeval end_time){
+  long int elapsed_time = (end_time.tv_usec + 1000 * end_time.tv_sec)
+  - (initial_time.tv_usec + 1000 * initial_time.tv_sec);
+
+  long int elapsed_milisseconds = (unsigned) elapsed_time % 1000;
+  return elapsed_milisseconds;
 }
 
 int rtt(){
@@ -74,16 +86,18 @@ int rtt(){
   struct sockaddr_in server_socket = create_socket_addr();
 
   int client_socket = send_message(message, server_socket);
-  clock_t tInicio = clock();
+  struct timeval initial_time;
+  gettimeofday(&initial_time,NULL);
 
-  int received = receive_answer(client_socket, server_socket);
-  if (received == 0){
-    clock_t tFim = clock();
+  char *received = receive_answer(client_socket, server_socket);
+  if (received != NULL){
+    struct timeval end_time;
+    gettimeofday(&end_time,NULL);
 
-    double tDecorrido = ((double)(tFim - tInicio)/(CLOCKS_PER_SEC));
-    printf("rtt = %lf segundo\n", tDecorrido);
+    long int elapsed_time = calc_rtt(initial_time, end_time);
+    printf("RTT = %ld milissegundos \t Horário do servidor: %s\n", elapsed_time,received);
   }else{
-    printf("Time out!");
+    printf("Time out!\n");
   }
 }
 
@@ -101,6 +115,7 @@ int main(int argc, char const *argv[]){ //argc: quantidade de argumentos argv: c
      else if (strcmp(argv[1], "rtt") == 0){
        // if is rrt, send rtt
        int counter;
+       srand(time(NULL));
        for (counter=0; counter<=9; counter++){ //manda 10x
          rtt();
          printf("\n");

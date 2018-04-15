@@ -15,36 +15,30 @@
 
 int hostname_to_ip(char * hostname , char* ip)
 {
-    printf("Hostname: %s\n",hostname);
-    struct hostent *hostent = gethostbyname(hostname); // STRUCT HOSTENT: //funciona DNS da biblioteca 
-    if ( hostent == NULL) //se IP=0.0.0.0 NAO FOI ENCOTRADO
+    struct hostent *hostent = gethostbyname(hostname);
+    if (hostent == NULL)
     {
-        herror("gethostbyname");  //MUDAR DE ACORDO COM REQUISIÇÃO DO TRABALHO
-        return 1;
+      strcpy(ip, "Nao encontrado");
+      return 1;
+    } else{
+      struct in_addr **addr_list;
+      addr_list = (struct in_addr **) hostent->h_addr_list;
+      strcpy(ip , inet_ntoa(*addr_list[0]) );
+      return 0;
     }
-
-    struct in_addr **addr_list;
-    addr_list = (struct in_addr **) hostent->h_addr_list;
-
-    int i;
-    for(i = 0; addr_list[i] != NULL; i++) //copia para o IP 
-    {
-        //Return the first one;
-        strcpy(ip , inet_ntoa(*addr_list[i]) );
-        return 0;
-    }
-
-    return 1;
 }
 
-const char* rsv(char *arguments, char *ip){
+char* rsv(char *arguments, char *ip){
   int length = strlen(arguments) - 5;
-  char hostname[length + 1]; //+ é do /0
-  memcpy( hostname, &arguments[5], length); //copiado o nome que se quer resolver
-  hostname[length] = '\0'; //coloca o /0
-  hostname_to_ip(hostname , ip); //envia para a outra função
+  char hostname[length + 1];
+  memcpy( hostname, &arguments[5], length);
+  hostname[length] = '\0';
 
-  return ip;
+  int found = hostname_to_ip(hostname , ip); //envia para a outra função
+
+  char *message = (char*)malloc(SIZE * sizeof(char));
+  snprintf(message, SIZE, "Rrsv: %d %s\n", found, ip);
+  return message;
 }
 
 int server (){
@@ -70,34 +64,26 @@ int server (){
   while(TRUE){ //sempre funciona
     char *buffer = (char*)malloc(SIZE * sizeof(char)); //aqui fica a mensagem do cliente
     // will receive any UDP package, storing client information in server_storage so that the properly answer can be send
-    int udp_return = recvfrom(server_socket,buffer,SIZE,0,(struct sockaddr *)&server_storage, &socket_size); //receive from 
+    int udp_return = recvfrom(server_socket,buffer,SIZE,0,(struct sockaddr *)&server_storage, &socket_size); //receive from
 
     char *answer = (char*)malloc(SIZE * sizeof(char)); //variavel que pega a requisição do buffer e gera uma resposta
-    
-    char msg[5]="Rrtt";
 
-    struct tm time_now= {0};
-    time_t time_clock;
 
-    time(&time_clock);
-    time_now = *localtime(&time_clock);
 
-    printf("%s\n", buffer);
      if (strcmp(buffer, "rtt") == 0){ //Calcular o RTT
-      // snprintf(answer, SIZE, "%s Horário da máquina: %d:%d:%d\n", buffer, time_now.tm_hour, time_now.tm_min, time_now.tm_sec);
- 	snprintf(answer, SIZE, "%s! Horário da máquina do servidor: %d:%d:%d\n", msg, time_now.tm_hour, time_now.tm_min, time_now.tm_sec);
-        printf("%d %s\n",udp_return,answer);
+       struct tm time_now= {0};
+       time_t time_clock;
+
+       time(&time_clock);
+       time_now = *localtime(&time_clock);
+ 	     snprintf(answer, SIZE, "Rrtt: %d:%d:%d", time_now.tm_hour, time_now.tm_min, time_now.tm_sec);
 
      }
      else {
-       char ip[100]; //guarda o Ip que sera descoberto
-       rsv(buffer, ip);
+       char ip[100]; //guarda o Ip que sera
 
-       snprintf(answer, SIZE, "Rrsv: %s", ip);
-       printf("%d %s\n", udp_return,answer);
-
+       strcpy(answer , rsv(buffer, ip));
      }
-     size_t length = strlen(answer);
     sendto(server_socket, answer, udp_return, 0, (struct sockaddr *)&server_storage, socket_size);
   }
   return 0;
